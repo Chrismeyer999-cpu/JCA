@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { adminClient } from '@/lib/supabase/admin'
 import SyncNowButton from '@/components/SyncNowButton'
-import PriceCalculator from '@/components/PriceCalculator'
 import DeleteListingButton from '@/components/DeleteListingButton'
 
 export const dynamic = 'force-dynamic'
@@ -72,6 +71,8 @@ export default async function CarsDashboardPage() {
             <span>•</span>
             <Link href="/dashboard/archive">Archive</Link>
             <span>•</span>
+            <Link href="/dashboard/calculator">Calculator</Link>
+            <span>•</span>
             <code>/api/cars/check</code>
           </div>
           <SyncNowButton />
@@ -93,32 +94,21 @@ export default async function CarsDashboardPage() {
         ))}
       </div>
 
-      <PriceCalculator />
-
       <section style={{ border: '1px solid #ddd', borderRadius: 10, padding: 12, marginBottom: 16, background: '#fff' }}>
-        <h2 style={{ marginTop: 0 }}>Laatste collector runs</h2>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th align="left">Tijd</th><th align="left">Status</th><th align="right">Fetched</th><th align="right">Matched</th><th align="right">Inserted</th><th align="right">Updated</th><th align="left">Error</th>
-              </tr>
-            </thead>
-            <tbody>
-              {runRows.map((r, i) => (
-                <tr key={i} style={{ borderTop: '1px solid #eee' }}>
-                  <td>{new Date(r.checked_at).toLocaleString()}</td>
-                  <td>{r.status === 'ok' ? '✅ ok' : '⚠️ fail'}</td>
-                  <td align="right">{fmtNum(r.fetched_count)}</td>
-                  <td align="right">{fmtNum(r.matched_count)}</td>
-                  <td align="right">{fmtNum(r.inserted_count)}</td>
-                  <td align="right">{fmtNum(r.updated_count)}</td>
-                  <td>{r.error_text ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <h2 style={{ marginTop: 0 }}>Laatste collector run</h2>
+        {lastRun ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,minmax(120px,1fr))', gap: 10 }}>
+            <div><div style={{ color: '#666', fontSize: 12 }}>Tijd</div><div>{new Date(lastRun.checked_at).toLocaleString()}</div></div>
+            <div><div style={{ color: '#666', fontSize: 12 }}>Status</div><div>{lastRun.status === 'ok' ? '✅ ok' : '⚠️ fail'}</div></div>
+            <div><div style={{ color: '#666', fontSize: 12 }}>Fetched</div><div>{fmtNum(lastRun.fetched_count)}</div></div>
+            <div><div style={{ color: '#666', fontSize: 12 }}>Matched</div><div>{fmtNum(lastRun.matched_count)}</div></div>
+            <div><div style={{ color: '#666', fontSize: 12 }}>Inserted</div><div>{fmtNum(lastRun.inserted_count)}</div></div>
+            <div><div style={{ color: '#666', fontSize: 12 }}>Updated</div><div>{fmtNum(lastRun.updated_count)}</div></div>
+            <div><div style={{ color: '#666', fontSize: 12 }}>Error</div><div>{lastRun.error_text ?? '—'}</div></div>
+          </div>
+        ) : (
+          <p>Geen runs gevonden.</p>
+        )}
       </section>
 
       <section style={{ border: '1px solid #ddd', borderRadius: 10, padding: 12, background: '#fff' }}>
