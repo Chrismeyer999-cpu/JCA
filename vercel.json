@@ -1,0 +1,7 @@
+{
+  "crons": [
+    { "path": "/api/cars/check?slot=1", "schedule": "15 0 * * *" },
+    { "path": "/api/cars/check?slot=2", "schedule": "15 4 * * *" },
+    { "path": "/api/cars/check?slot=3", "schedule": "15 9 * * *" }
+  ]
+}
