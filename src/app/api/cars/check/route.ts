@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { runCollector } from '@/lib/collector'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 
 export const runtime = 'nodejs'
 
 const execFileAsync = promisify(execFile)
 
 async function runPlaywrightCollectorScript() {
-  const { stdout } = await execFileAsync(process.execPath, ['scripts/collector-playwright.mjs'], {
+  const scriptPath = join(process.cwd(), 'scripts', 'collector-playwright.mjs')
+  if (!existsSync(scriptPath)) {
+    throw new Error('Playwright script not available in this runtime')
+  }
+
+  const { stdout } = await execFileAsync(process.execPath, [scriptPath], {
     cwd: process.cwd(),
     env: process.env,
     timeout: 1000 * 60 * 4,
@@ -33,11 +40,24 @@ export async function GET(req: NextRequest) {
 
   try {
     const canUsePlaywright = !!process.env.JCD_USERNAME && !!process.env.JCD_PASSWORD
-    const result = canUsePlaywright
-      ? await runPlaywrightCollectorScript()
-      : await runCollector()
 
-    return NextResponse.json({ ok: true, mode: canUsePlaywright ? 'playwright' : 'http', ...result })
+    if (canUsePlaywright) {
+      try {
+        const result = await runPlaywrightCollectorScript()
+        return NextResponse.json({ ok: true, mode: 'playwright', ...result })
+      } catch (playErr) {
+        const fallback = await runCollector()
+        return NextResponse.json({
+          ok: true,
+          mode: 'http-fallback',
+          warning: playErr instanceof Error ? playErr.message : 'Playwright unavailable',
+          ...fallback
+        })
+      }
+    }
+
+    const result = await runCollector()
+    return NextResponse.json({ ok: true, mode: 'http', ...result })
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : 'Collector failed' },
