@@ -126,16 +126,22 @@ async function runSearchForWatch(page, watch) {
   const vendor = data.find((x) => x.name === makeLower || x.name.includes(makeLower))
   if (!vendor) return []
 
-  const modelVariants = Array.from(
-    new Set([
-      modelRaw,
-      modelRaw.replace(/-/g, ' '),
-      modelRaw.replace(/\s+/g, ' '),
-      modelRaw.toUpperCase(),
-      modelRaw.toLowerCase(),
-      modelRaw.replace(/series/i, 'SERIES').replace(/-/g, ' ').trim()
-    ].filter(Boolean))
-  )
+  const baseVariants = [
+    modelRaw,
+    modelRaw.replace(/-/g, ' '),
+    modelRaw.replace(/\s+/g, ' '),
+    modelRaw.toUpperCase(),
+    modelRaw.toLowerCase(),
+    modelRaw.replace(/series/i, 'SERIES').replace(/-/g, ' ').trim()
+  ]
+
+  const seriesMatch = modelRaw.match(/\b([1-9])\s*[- ]?series\b/i)
+  if (seriesMatch) {
+    baseVariants.push(`${seriesMatch[1]} SERIES`)
+    baseVariants.push(seriesMatch[1])
+  }
+
+  const modelVariants = Array.from(new Set(baseVariants.filter(Boolean)))
 
   const all = []
   for (const model of modelVariants) {

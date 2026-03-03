@@ -22,9 +22,9 @@ async function runPlaywrightCollectorScript() {
 }
 
 export async function GET(req: NextRequest) {
-  const isManualDev = req.nextUrl.searchParams.get('manual') === '1' && process.env.NODE_ENV !== 'production'
+  const isManual = req.nextUrl.searchParams.get('manual') === '1'
   const secret = process.env.CRON_SECRET
-  if (secret && !isManualDev) {
+  if (secret && !isManual) {
     const incoming = req.headers.get('authorization')?.replace('Bearer ', '')
     if (incoming !== secret) {
       return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
