@@ -79,7 +79,7 @@ function passesWatchFilters(parsed, w) {
   const yearOk = (!w.min_year || !year || year >= w.min_year) && (!w.max_year || !year || year <= w.max_year)
   const kmOk = !w.max_km || !km || km <= w.max_km
   const priceOk = !w.max_price_jpy || !price || price <= w.max_price_jpy
-  const transOk = !w.transmission || w.transmission === 'any' || trans === w.transmission
+  const transOk = !w.transmission || w.transmission === 'any' || trans === 'unknown' || trans === w.transmission
   const engineMinOk = !w.min_engine_cc || !engine || engine >= w.min_engine_cc
   const engineMaxOk = !w.max_engine_cc || !engine || engine <= w.max_engine_cc
   return yearOk && kmOk && priceOk && transOk && engineMinOk && engineMaxOk
@@ -165,6 +165,30 @@ async function runSearchForWatch(page, watch) {
   for (const r of all) {
     dedup.set(`${r.href}|${r.text.slice(0, 60)}`, r)
   }
+
+  // Fallback voor series-modellen: brede zoekrun en client-side filter op modelnummer.
+  if (dedup.size === 0 && seriesMatch) {
+    await page.evaluate(
+      ({ vendorId }) => {
+        // @ts-ignore
+        if (typeof window.model_submit === 'function') {
+          // @ts-ignore
+          window.model_submit(vendorId, '', 1, 0, 1)
+        }
+      },
+      { vendorId: vendor.id }
+    )
+    await page.waitForTimeout(2000)
+    const broadRows = await scrapeRowsFromCurrentPage(page)
+    const token = `${seriesMatch[1]} `
+    for (const r of broadRows) {
+      const t = r.text.toLowerCase()
+      if (t.includes(`${seriesMatch[1]} series`) || t.includes(`${seriesMatch[1]}-series`) || t.includes(token)) {
+        dedup.set(`${r.href}|${r.text.slice(0, 60)}`, r)
+      }
+    }
+  }
+
   return [...dedup.values()]
 }
 
