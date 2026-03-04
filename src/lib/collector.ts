@@ -43,7 +43,8 @@ function parseSearchResults(html: string): ListingInput[] {
   const out: ListingInput[] = []
   const seen = new Set<string>()
 
-  const hrefLooksLikeListing = (href: string) => /aj[-_][^\s"'`]+\.htm/i.test(href) || /\/aj[-_][^\s"'`]+/i.test(href)
+  const hrefLooksLikeListing = (href: string) =>
+    /aj[-_][^\s"'`]+\.htm/i.test(href) || /\/aj[-_][^\s"'`]+/i.test(href)
 
   const extractHref = (raw: string) => {
     if (!raw) return null
@@ -76,7 +77,7 @@ function parseSearchResults(html: string): ListingInput[] {
     out.push({
       source_listing_id: href,
       url,
-      title: t.slice(0, 200),
+      title: t.slice(0, 240),
       year: yearMatch ? Number(yearMatch[1]) : undefined,
       mileage_km: kmMatch ? Number(kmMatch[1].replace(/[ ,]/g, '')) : undefined,
       price_jpy: yenMatches.length > 0 ? Number(String(yenMatches[yenMatches.length - 1][1]).replace(/[ ,]/g, '')) : undefined,
@@ -119,10 +120,7 @@ async function collectFromJapanCarDirect(watchlist: Watchlist[]): Promise<{ item
     if (!w.search_url) continue
     try {
       const html = await fetchHtml(w.search_url, cookie)
-      const parsed = parseSearchResults(html).map((x) => ({
-        ...x,
-        payload: { ...(x.payload ?? {}), _watchlist_id: w.id }
-      }))
+      const parsed = parseSearchResults(html)
       all.push(...parsed)
       await new Promise((r) => setTimeout(r, 900))
     } catch (e) {
@@ -134,10 +132,31 @@ async function collectFromJapanCarDirect(watchlist: Watchlist[]): Promise<{ item
   return { items: all, errors }
 }
 
+function escRegex(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function hasToken(text: string, token: string) {
+  if (!token.trim()) return true
+  const p = `(^|[^a-z0-9])${escRegex(token.toLowerCase())}([^a-z0-9]|$)`
+  return new RegExp(p, 'i').test(text)
+}
+
+function hasModelPhrase(text: string, model: string) {
+  const parts = model.toLowerCase().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return true
+
+  if (parts.length === 1 && parts[0].length <= 3) return hasToken(text, parts[0])
+
+  return parts.every((p) => hasToken(text, p))
+}
+
 function matchesWatchlist(item: ListingInput, w: Watchlist) {
   const text = `${item.make ?? ''} ${item.model ?? ''} ${item.title ?? ''}`.toLowerCase()
-  const base = text.includes(w.make.toLowerCase()) && text.includes(w.model.toLowerCase())
-  const kwOk = w.keywords.length === 0 || w.keywords.some((k) => text.includes(k.toLowerCase()))
+
+  const makeOk = hasToken(text, w.make)
+  const modelOk = hasModelPhrase(text, w.model)
+  const kwOk = w.keywords.length === 0 || w.keywords.some((k) => hasToken(text, k))
 
   const yearOk = (!w.min_year || !item.year || item.year >= w.min_year) &&
     (!w.max_year || !item.year || item.year <= w.max_year)
@@ -152,7 +171,7 @@ function matchesWatchlist(item: ListingInput, w: Watchlist) {
   const engineMinOk = !w.min_engine_cc || !meta.engine_cc || meta.engine_cc >= w.min_engine_cc
   const engineMaxOk = !w.max_engine_cc || !meta.engine_cc || meta.engine_cc <= w.max_engine_cc
 
-  return base && kwOk && yearOk && kmOk && priceOk && transmissionOk && engineMinOk && engineMaxOk
+  return makeOk && modelOk && kwOk && yearOk && kmOk && priceOk && transmissionOk && engineMinOk && engineMaxOk
 }
 
 export async function runCollector() {
@@ -168,12 +187,9 @@ export async function runCollector() {
   let updated = 0
 
   for (const item of items) {
-    const forcedWatchId = (item.payload as { _watchlist_id?: string } | undefined)?._watchlist_id
-    const matchedWatch = (forcedWatchId
-      ? wl.find((w) => w.id === forcedWatchId)
-      : wl.find((w) => matchesWatchlist(item, w)))
-
+    const matchedWatch = wl.find((w) => matchesWatchlist(item, w))
     if (!matchedWatch) continue
+
     matched += 1
 
     const sourceId = item.source_listing_id ?? item.url
@@ -184,6 +200,12 @@ export async function runCollector() {
       .or(`source_listing_id.eq.${sourceId},url.eq.${item.url}`)
       .maybeSingle()
 
+    const nextPayload = {
+      ...(item.payload ?? {}),
+      _matched_make: matchedWatch.make,
+      _matched_model: matchedWatch.model
+    }
+
     if (existing?.id) {
       const { error } = await db
         .from('car_listings')
@@ -193,7 +215,8 @@ export async function runCollector() {
           model: matchedWatch.model,
           watchlist_id: matchedWatch.id,
           is_new: false,
-          last_seen_at: new Date().toISOString()
+          last_seen_at: new Date().toISOString(),
+          payload: nextPayload
         })
         .eq('id', existing.id)
       if (!error) updated += 1
@@ -208,7 +231,7 @@ export async function runCollector() {
         first_seen_at: new Date().toISOString(),
         last_seen_at: new Date().toISOString(),
         is_new: true,
-        payload: item.payload ?? {}
+        payload: nextPayload
       })
       if (!error) inserted += 1
     }
