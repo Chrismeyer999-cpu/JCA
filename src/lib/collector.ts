@@ -120,7 +120,10 @@ async function collectFromJapanCarDirect(watchlist: Watchlist[]): Promise<{ item
     if (!w.search_url) continue
     try {
       const html = await fetchHtml(w.search_url, cookie)
-      const parsed = parseSearchResults(html)
+      const parsed = parseSearchResults(html).map((x) => ({
+        ...x,
+        payload: { ...(x.payload ?? {}), _watchlist_id: w.id }
+      }))
       all.push(...parsed)
       await new Promise((r) => setTimeout(r, 900))
     } catch (e) {
@@ -206,7 +209,13 @@ export async function runCollector() {
   let updated = 0
 
   for (const item of items) {
-    const matchedWatch = wl.find((w) => matchesWatchlist(item, w))
+    const forcedWatchId = (item.payload as { _watchlist_id?: string } | undefined)?._watchlist_id
+    const forcedWatch = forcedWatchId ? wl.find((w) => w.id === forcedWatchId) : null
+
+    const matchedWatch = forcedWatch
+      ? (matchesWatchlist(item, forcedWatch) ? forcedWatch : null)
+      : wl.find((w) => matchesWatchlist(item, w))
+
     if (!matchedWatch) continue
 
     matched += 1
@@ -267,4 +276,5 @@ export async function runCollector() {
 
   return { fetched: items.length, matched, inserted, updated, errors }
 }
+
 
