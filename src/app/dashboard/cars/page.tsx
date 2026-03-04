@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { adminClient } from '@/lib/supabase/admin'
 import SyncNowButton from '@/components/SyncNowButton'
 import DeleteListingButton from '@/components/DeleteListingButton'
+import ListingActions from '@/components/ListingActions'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,20 @@ function absImage(src?: string | null) {
   return `https://auc.japancardirect.com/${src}`
 }
 
+async function autoArchiveAuctioned(db: ReturnType<typeof adminClient>) {
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: due } = await db
+    .from('car_listings')
+    .select('*')
+    .lt('auction_date', today)
+    .limit(200)
+
+  for (const row of due ?? []) {
+    await db.from('car_listings_archive').insert({ ...row, archived_at: new Date().toISOString() })
+    await db.from('car_listings').delete().eq('id', row.id)
+  }
+}
+
 export default async function CarsDashboardPage() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return (
@@ -30,11 +45,14 @@ export default async function CarsDashboardPage() {
   }
 
   const db = adminClient()
+  await autoArchiveAuctioned(db)
 
   const [{ data: latest }, { data: runs }, { data: watchlist }] = await Promise.all([
     db
       .from('car_listings')
-      .select('id,title,make,model,year,mileage_km,price_jpy,auction_date,url,is_new,last_seen_at,payload')
+      .select('id,title,make,model,year,mileage_km,price_jpy,auction_date,url,is_new,last_seen_at,payload,priority_rank')
+      .order('priority_rank', { ascending: true, nullsFirst: false })
+      .order('auction_date', { ascending: true, nullsFirst: false })
       .order('last_seen_at', { ascending: false })
       .limit(200),
     db
@@ -64,15 +82,9 @@ export default async function CarsDashboardPage() {
 
         <div className="flex flex-col gap-2 lg:items-end">
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Link href="/dashboard/watchlist" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 hover:bg-slate-50">
-              Watchlist beheren
-            </Link>
-            <Link href="/dashboard/archive" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 hover:bg-slate-50">
-              Archive
-            </Link>
-            <Link href="/dashboard/calculator" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 hover:bg-slate-50">
-              Calculator
-            </Link>
+            <Link href="/dashboard/watchlist" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 hover:bg-slate-50">Watchlist beheren</Link>
+            <Link href="/dashboard/archive" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 hover:bg-slate-50">Archive</Link>
+            <Link href="/dashboard/calculator" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 hover:bg-slate-50">Calculator</Link>
             <code className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5">/api/cars/check</code>
           </div>
           <SyncNowButton />
@@ -106,35 +118,22 @@ export default async function CarsDashboardPage() {
             <div><div className="text-xs text-slate-500">Updated</div><div className="text-sm">{fmtNum(lastRun.updated_count)}</div></div>
             <div><div className="text-xs text-slate-500">Error</div><div className="text-sm break-words">{lastRun.error_text ?? '—'}</div></div>
           </div>
-        ) : (
-          <p className="text-sm text-slate-600">Geen runs gevonden.</p>
-        )}
+        ) : <p className="text-sm text-slate-600">Geen runs gevonden.</p>}
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-900">Listings</h2>
-          <span className="text-sm text-slate-600">Alle recente resultaten zichtbaar (limiet 200)</span>
+          <span className="text-sm text-slate-600">Sortering: prioriteit → auction date → recent</span>
         </div>
-        <p className="mb-3 text-sm text-slate-600">Mobiel: swipe horizontaal in de tabel voor alle kolommen.</p>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] border-collapse text-left text-xs sm:text-sm">
+          <table className="w-full min-w-[1250px] border-collapse text-left text-xs sm:text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-slate-600">
-                <th className="px-2 py-2">Foto</th>
-                <th className="px-2 py-2">Status</th>
-                <th className="px-2 py-2">Model</th>
-                <th className="px-2 py-2">Listing</th>
-                <th className="px-2 py-2 text-right">Year</th>
-                <th className="px-2 py-2 text-right">KM</th>
-                <th className="px-2 py-2 text-right">JPY</th>
-                <th className="px-2 py-2 text-right">Sold JPY</th>
-                <th className="px-2 py-2">Steering</th>
-                <th className="px-2 py-2">Auction date</th>
-                <th className="px-2 py-2">Laatste gezien</th>
-                <th className="px-2 py-2">Link</th>
-                <th className="px-2 py-2">Actie</th>
+                <th className="px-2 py-2">Foto</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Model</th><th className="px-2 py-2">Listing</th>
+                <th className="px-2 py-2 text-right">Year</th><th className="px-2 py-2 text-right">KM</th><th className="px-2 py-2 text-right">JPY</th><th className="px-2 py-2 text-right">Sold JPY</th>
+                <th className="px-2 py-2">Steering</th><th className="px-2 py-2">Auction date</th><th className="px-2 py-2">Prioriteit</th><th className="px-2 py-2">Laatste gezien</th><th className="px-2 py-2">Link</th><th className="px-2 py-2">Actie</th>
               </tr>
             </thead>
             <tbody>
@@ -143,12 +142,7 @@ export default async function CarsDashboardPage() {
                 const img = absImage(p.thumbnail_url)
                 return (
                   <tr key={i} className="border-b border-slate-100 align-top">
-                    <td className="px-2 py-2">
-                      {img ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={img} alt="car" className="h-14 w-24 rounded-md object-cover" />
-                      ) : '—'}
-                    </td>
+                    <td className="px-2 py-2">{img ? <img src={img} alt="car" className="h-14 w-24 rounded-md object-cover" /> : '—'}</td>
                     <td className="px-2 py-2">{x.is_new ? '🟢 new' : '⚪ seen'}</td>
                     <td className="px-2 py-2">{`${x.make ?? ''} ${x.model ?? ''}`.trim() || '—'}</td>
                     <td className="px-2 py-2">{x.title ?? '—'}</td>
@@ -157,12 +151,11 @@ export default async function CarsDashboardPage() {
                     <td className="px-2 py-2 text-right">{fmtNum(x.price_jpy)}</td>
                     <td className="px-2 py-2 text-right">{fmtNum((p.sold_price_jpy as number | null | undefined) ?? null)}</td>
                     <td className="px-2 py-2">{p.steering ?? '—'}</td>
-                    <td className="px-2 py-2">{x.auction_date ?? '—'}</td>
+                    <td className="px-2 py-2">{x.auction_date ? new Date(x.auction_date).toLocaleDateString() : '—'}</td>
+                    <td className="px-2 py-2">P{x.priority_rank ?? 3}</td>
                     <td className="px-2 py-2">{x.last_seen_at ? new Date(x.last_seen_at).toLocaleString() : '—'}</td>
-                    <td className="px-2 py-2">
-                      <Link href={x.url} target="_blank" className="text-blue-700 underline underline-offset-2">open</Link>
-                    </td>
-                    <td className="px-2 py-2"><DeleteListingButton id={x.id} /></td>
+                    <td className="px-2 py-2"><Link href={x.url} target="_blank" className="text-blue-700 underline underline-offset-2">open</Link></td>
+                    <td className="px-2 py-2"><ListingActions id={x.id} priorityRank={x.priority_rank ?? 3} /><DeleteListingButton id={x.id} /></td>
                   </tr>
                 )
               })}

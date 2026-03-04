@@ -65,3 +65,8 @@ create table if not exists collector_runs (
   updated_count int not null default 0,
   error_text text
 );
+
+
+-- Priority ordering for which car should be first
+alter table car_listings add column if not exists priority_rank int not null default 3;
+alter table car_listings_archive add column if not exists priority_rank int;
