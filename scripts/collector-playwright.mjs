@@ -238,6 +238,16 @@ async function runSearchForWatch(page, watch) {
   return [...dedup.values()]
 }
 
+async function extractDetailText(detailPage, url) {
+  try {
+    await detailPage.goto(url, { waitUntil: 'domcontentloaded' })
+    await detailPage.waitForTimeout(900)
+    return (await detailPage.locator('body').innerText()).replace(/\s+/g, ' ').toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
 async function main() {
   const { data: watchlist, error } = await db.from('watchlist').select('*').eq('active', true)
   if (error) throw error
@@ -250,6 +260,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true })
   const context = await browser.newContext()
   const page = await context.newPage()
+  const detailPage = await context.newPage()
 
   await page.goto('https://auc.japancardirect.com/', { waitUntil: 'domcontentloaded' })
 
@@ -301,14 +312,21 @@ async function main() {
       if (!passesWatchTextMatch(rowText, w)) continue
       if (!passesWatchFilters(parsed, w)) continue
 
+      const detailText = await extractDetailText(detailPage, url)
+      if (!passesWatchTextMatch(detailText, w)) continue
+
       matched += 1
       const sourceId = c.href
       const { data: existing } = await db
         .from('car_listings')
-        .select('id')
+        .select('id,make,model')
         .eq('source', 'auc.japancardirect.com')
         .or(`source_listing_id.eq.${sourceId},url.eq.${url}`)
         .maybeSingle()
+
+      if (existing?.id && (existing.make !== w.make || existing.model !== w.model)) {
+        continue
+      }
 
       if (existing?.id) {
         const { error: upErr } = await db
@@ -342,7 +360,7 @@ async function main() {
       }
     }
 
-    await page.waitForTimeout(700)
+    await page.waitForTimeout(500)
   }
 
   const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
@@ -380,4 +398,3 @@ main().catch(async (e) => {
   console.error(e)
   process.exit(1)
 })
-
