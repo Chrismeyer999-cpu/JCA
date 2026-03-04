@@ -151,6 +151,23 @@ function hasModelPhrase(text: string, model: string) {
   return parts.every((p) => hasToken(text, p))
 }
 
+
+function passesModelGuard(text: string, make: string, model: string) {
+  const mk = make.toLowerCase().trim()
+  const md = model.toLowerCase().trim()
+
+  if (mk === 'bmw' && md === 'm2') {
+    if (!hasToken(text, 'm2')) return false
+    if (/\b2\s*series\b|\b218\b|\b220\b|\b228\b|\b230\b|\b235\b|\b240\b/i.test(text)) return false
+  }
+
+  if (mk === 'porsche' && md === '911') {
+    if (!hasToken(text, '911')) return false
+    if (/\bcayenne\b|\bpanamera\b|\bmacan\b|\bboxster\b|\bcayman\b/i.test(text)) return false
+  }
+
+  return true
+}
 function matchesWatchlist(item: ListingInput, w: Watchlist) {
   const text = `${item.make ?? ''} ${item.model ?? ''} ${item.title ?? ''}`.toLowerCase()
 
@@ -171,7 +188,9 @@ function matchesWatchlist(item: ListingInput, w: Watchlist) {
   const engineMinOk = !w.min_engine_cc || !meta.engine_cc || meta.engine_cc >= w.min_engine_cc
   const engineMaxOk = !w.max_engine_cc || !meta.engine_cc || meta.engine_cc <= w.max_engine_cc
 
-  return makeOk && modelOk && kwOk && yearOk && kmOk && priceOk && transmissionOk && engineMinOk && engineMaxOk
+  const guardOk = passesModelGuard(text, w.make, w.model)
+
+  return makeOk && modelOk && kwOk && yearOk && kmOk && priceOk && transmissionOk && engineMinOk && engineMaxOk && guardOk
 }
 
 export async function runCollector() {
@@ -248,3 +267,4 @@ export async function runCollector() {
 
   return { fetched: items.length, matched, inserted, updated, errors }
 }
+
