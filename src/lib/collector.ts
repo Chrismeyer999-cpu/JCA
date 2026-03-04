@@ -159,6 +159,13 @@ function passesModelGuard(text: string, make: string, model: string) {
   const mk = make.toLowerCase().trim()
   const md = model.toLowerCase().trim()
 
+  if (md.length <= 1) return false
+
+  if (mk === 'bmw' && md === '2 series') {
+    if (!/\b2\s*series\b|\b2-series\b/i.test(text)) return false
+    if (/\bm2\b/i.test(text)) return false
+  }
+
   if (mk === 'bmw' && md === 'm2') {
     if (!hasToken(text, 'm2')) return false
     if (/\b2\s*series\b|\b218\b|\b220\b|\b228\b|\b230\b|\b235\b|\b240\b/i.test(text)) return false
@@ -276,5 +283,6 @@ export async function runCollector() {
 
   return { fetched: items.length, matched, inserted, updated, errors }
 }
+
 
 

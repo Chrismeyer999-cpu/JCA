@@ -112,6 +112,13 @@ function passesWatchTextMatch(text, w) {
   const make = String(w.make || '').toLowerCase().trim()
   const model = String(w.model || '').toLowerCase().trim()
 
+  if (model.length <= 1) return false
+
+  if (make === 'bmw' && model === '2 series') {
+    if (!/\b2\s*series\b|\b2-series\b/i.test(t)) return false
+    if (/\bm2\b/i.test(t)) return false
+  }
+
   if (make === 'bmw' && model === 'm2') {
     if (!hasToken(t, 'm2')) return false
     if (/\b2\s*series\b|\b218\b|\b220\b|\b228\b|\b230\b|\b235\b|\b240\b/i.test(t)) return false
@@ -373,3 +380,4 @@ main().catch(async (e) => {
   console.error(e)
   process.exit(1)
 })
+
