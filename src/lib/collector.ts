@@ -41,17 +41,31 @@ function parseMeta(text: string): ParsedListingMeta {
 function parseSearchResults(html: string): ListingInput[] {
   const $ = cheerio.load(html)
   const out: ListingInput[] = []
-
   const seen = new Set<string>()
-  $('a[href]').each((_i, el) => {
-    const href = String($(el).attr('href') || '')
-    if (!/aj[-_][^\s"']+\.htm/i.test(href)) return
 
-    const row = $(el).closest('tr')
-    const t = row.text().replace(/\s+/g, ' ').trim()
+  const hrefLooksLikeListing = (href: string) => /aj[-_][^\s"'`]+\.htm/i.test(href) || /\/aj[-_][^\s"'`]+/i.test(href)
+
+  const extractHref = (raw: string) => {
+    if (!raw) return null
+    const direct = raw.trim()
+    if (hrefLooksLikeListing(direct)) return direct
+
+    const m = direct.match(/['"]([^'"]*aj[-_][^'"`\s]+\.htm[^'"]*)['"]/i)
+    if (m?.[1]) return m[1]
+
+    const m2 = direct.match(/(\/[^\s'"`]*aj[-_][^\s'"`]+\.htm[^\s'"`]*)/i)
+    if (m2?.[1]) return m2[1]
+
+    return null
+  }
+
+  const parseRow = (href: string, rowText: string) => {
+    const t = rowText.replace(/\s+/g, ' ').trim()
+    if (!t) return
+
     const yearMatch = t.match(/\b(19\d{2}|20\d{2})\b/)
     const kmMatch = t.match(/(\d{1,3}(?:[ ,]\d{3})*)\s*km/i)
-    const yenMatches = [...t.matchAll(/(\d{1,3}(?:[ ,]\d{3})*)\s*¥/g)]
+    const yenMatches = [...t.matchAll(/(\d{1,3}(?:[ ,]\d{3})*)\s*(?:¥|JPY|円)/gi)]
 
     const url = toAbs(href)
     if (seen.has(url)) return
@@ -68,7 +82,30 @@ function parseSearchResults(html: string): ListingInput[] {
       price_jpy: yenMatches.length > 0 ? Number(String(yenMatches[yenMatches.length - 1][1]).replace(/[ ,]/g, '')) : undefined,
       payload: { row_text: t, ...meta }
     })
+  }
+
+  $('a, [onclick], [data-href]').each((_i, el) => {
+    const rawHref =
+      String($(el).attr('href') || '') ||
+      String($(el).attr('data-href') || '') ||
+      String($(el).attr('onclick') || '')
+
+    const href = extractHref(rawHref)
+    if (!href) return
+
+    const row = $(el).closest('tr')
+    const rowText = row.length ? row.text() : $(el).parent().text()
+    parseRow(href, rowText)
   })
+
+  if (out.length === 0) {
+    const fallback = [...html.matchAll(/(?:href|location\.href|open\()\s*[=\(]?\s*['"]([^'"]*aj[-_][^'"`\s]+\.htm[^'"]*)['"]/gi)]
+    for (const m of fallback) {
+      const href = m[1]
+      if (!href) continue
+      parseRow(href, html)
+    }
+  }
 
   return out
 }
