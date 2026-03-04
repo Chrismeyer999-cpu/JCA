@@ -110,9 +110,10 @@ function parseSearchResults(html: string): ListingInput[] {
   return out
 }
 
-async function collectFromJapanCarDirect(watchlist: Watchlist[]): Promise<ListingInput[]> {
+async function collectFromJapanCarDirect(watchlist: Watchlist[]): Promise<{ items: ListingInput[]; errors: string[] }> {
   const cookie = process.env.JCD_COOKIE
   const all: ListingInput[] = []
+  const errors: string[] = []
 
   for (const w of watchlist) {
     if (!w.search_url) continue
@@ -124,11 +125,13 @@ async function collectFromJapanCarDirect(watchlist: Watchlist[]): Promise<Listin
       }))
       all.push(...parsed)
       await new Promise((r) => setTimeout(r, 900))
-    } catch {
-      // per URL skip
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'unknown fetch error'
+      errors.push(`${w.search_url}: ${msg}`)
     }
   }
-  return all
+
+  return { items: all, errors }
 }
 
 function matchesWatchlist(item: ListingInput, w: Watchlist) {
@@ -158,7 +161,7 @@ export async function runCollector() {
   if (watchErr) throw watchErr
 
   const wl = (watchlist ?? []) as Watchlist[]
-  const items = await collectFromJapanCarDirect(wl)
+  const { items, errors } = await collectFromJapanCarDirect(wl)
 
   let matched = 0
   let inserted = 0
@@ -212,12 +215,13 @@ export async function runCollector() {
   }
 
   await db.from('collector_runs').insert({
-    status: 'ok',
+    status: errors.length > 0 && items.length === 0 ? 'fail' : 'ok',
     fetched_count: items.length,
     matched_count: matched,
     inserted_count: inserted,
-    updated_count: updated
+    updated_count: updated,
+    error_text: errors.length ? errors.slice(0, 5).join(' | ') : null
   })
 
-  return { fetched: items.length, matched, inserted, updated }
+  return { fetched: items.length, matched, inserted, updated, errors }
 }
