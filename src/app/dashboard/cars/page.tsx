@@ -20,9 +20,11 @@ function absImage(src?: string | null) {
 export default async function CarsDashboardPage() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return (
-      <main style={{ padding: 24, fontFamily: 'Inter, sans-serif' }}>
-        <h1>JCD Watchlist Dashboard</h1>
-        <p>Supabase env vars ontbreken. Voeg ze toe in <code>.env.local</code> en Vercel.</p>
+      <main className="mx-auto max-w-5xl p-6 font-sans">
+        <h1 className="text-2xl font-bold">JCD Watchlist Dashboard</h1>
+        <p className="mt-2 text-slate-600">
+          Supabase env vars ontbreken. Voeg ze toe in <code className="rounded bg-slate-100 px-1 py-0.5">.env.local</code> en Vercel.
+        </p>
       </main>
     )
   }
@@ -34,7 +36,7 @@ export default async function CarsDashboardPage() {
       .from('car_listings')
       .select('id,title,make,model,year,mileage_km,price_jpy,auction_date,url,is_new,last_seen_at,payload')
       .order('last_seen_at', { ascending: false })
-      .limit(100),
+      .limit(200),
     db
       .from('collector_runs')
       .select('checked_at,status,fetched_count,matched_count,inserted_count,updated_count,error_text')
@@ -47,39 +49,37 @@ export default async function CarsDashboardPage() {
   const runRows = runs ?? []
   const wl = watchlist ?? []
 
-  // Auto-hide verlopen items: toon alleen listings gezien in laatste 36 uur.
-  const activeRows = rows.filter((x) => {
-    if (!x.last_seen_at) return false
-    return Date.now() - new Date(x.last_seen_at).getTime() < 36 * 60 * 60 * 1000
-  })
-
-  const newCount = activeRows.filter((x) => x.is_new).length
-  const seenCount = activeRows.length - newCount
+  const newCount = rows.filter((x) => x.is_new).length
+  const seenCount = rows.length - newCount
   const activeWatch = wl.filter((x) => x.active).length
   const lastRun = runRows[0]
 
   return (
-    <main style={{ padding: 24, fontFamily: 'Inter, sans-serif', maxWidth: 1300, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+    <main className="mx-auto w-full max-w-[1400px] px-4 py-6 font-sans sm:px-6 lg:px-8">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 style={{ margin: 0 }}>JCD Watchlist Dashboard</h1>
-          <p style={{ margin: '6px 0 0', color: '#666' }}>3x per dag check • new listings highlight • run health</p>
+          <h1 className="text-2xl font-bold text-slate-900">JCD Watchlist Dashboard</h1>
+          <p className="mt-1 text-sm text-slate-600">3x per dag check • new listings highlight • run health</p>
         </div>
-        <div style={{ display: 'grid', gap: 8, justifyItems: 'end' }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Link href="/dashboard/watchlist">Watchlist beheren</Link>
-            <span>•</span>
-            <Link href="/dashboard/archive">Archive</Link>
-            <span>•</span>
-            <Link href="/dashboard/calculator">Calculator</Link>
-            <span>•</span>
-            <code>/api/cars/check</code>
+
+        <div className="flex flex-col gap-2 lg:items-end">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Link href="/dashboard/watchlist" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 hover:bg-slate-50">
+              Watchlist beheren
+            </Link>
+            <Link href="/dashboard/archive" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 hover:bg-slate-50">
+              Archive
+            </Link>
+            <Link href="/dashboard/calculator" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 hover:bg-slate-50">
+              Calculator
+            </Link>
+            <code className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5">/api/cars/check</code>
           </div>
           <SyncNowButton />
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(140px,1fr))', gap: 10, marginBottom: 16 }}>
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {[
           ['Nieuwe listings', String(newCount)],
           ['Geziene listings', String(seenCount)],
@@ -87,71 +87,82 @@ export default async function CarsDashboardPage() {
           ['Laatste fetched', lastRun ? String(lastRun.fetched_count) : '—'],
           ['Laatste matched', lastRun ? String(lastRun.matched_count) : '—']
         ].map(([k, v]) => (
-          <div key={k} style={{ border: '1px solid #ddd', borderRadius: 10, padding: 12, background: '#fff' }}>
-            <div style={{ fontSize: 12, color: '#666' }}>{k}</div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>{v}</div>
+          <div key={k} className="rounded-xl border border-slate-200 bg-white p-3">
+            <div className="text-xs text-slate-500">{k}</div>
+            <div className="text-2xl font-bold text-slate-900">{v}</div>
           </div>
         ))}
       </div>
 
-      <section style={{ border: '1px solid #ddd', borderRadius: 10, padding: 12, marginBottom: 16, background: '#fff' }}>
-        <h2 style={{ marginTop: 0 }}>Laatste collector run</h2>
+      <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
+        <h2 className="mb-3 text-lg font-semibold text-slate-900">Laatste collector run</h2>
         {lastRun ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,minmax(120px,1fr))', gap: 10 }}>
-            <div><div style={{ color: '#666', fontSize: 12 }}>Tijd</div><div>{new Date(lastRun.checked_at).toLocaleString()}</div></div>
-            <div><div style={{ color: '#666', fontSize: 12 }}>Status</div><div>{lastRun.status === 'ok' ? '✅ ok' : '⚠️ fail'}</div></div>
-            <div><div style={{ color: '#666', fontSize: 12 }}>Fetched</div><div>{fmtNum(lastRun.fetched_count)}</div></div>
-            <div><div style={{ color: '#666', fontSize: 12 }}>Matched</div><div>{fmtNum(lastRun.matched_count)}</div></div>
-            <div><div style={{ color: '#666', fontSize: 12 }}>Inserted</div><div>{fmtNum(lastRun.inserted_count)}</div></div>
-            <div><div style={{ color: '#666', fontSize: 12 }}>Updated</div><div>{fmtNum(lastRun.updated_count)}</div></div>
-            <div><div style={{ color: '#666', fontSize: 12 }}>Error</div><div>{lastRun.error_text ?? '—'}</div></div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
+            <div><div className="text-xs text-slate-500">Tijd</div><div className="text-sm">{new Date(lastRun.checked_at).toLocaleString()}</div></div>
+            <div><div className="text-xs text-slate-500">Status</div><div className="text-sm">{lastRun.status === 'ok' ? '✅ ok' : '⚠️ fail'}</div></div>
+            <div><div className="text-xs text-slate-500">Fetched</div><div className="text-sm">{fmtNum(lastRun.fetched_count)}</div></div>
+            <div><div className="text-xs text-slate-500">Matched</div><div className="text-sm">{fmtNum(lastRun.matched_count)}</div></div>
+            <div><div className="text-xs text-slate-500">Inserted</div><div className="text-sm">{fmtNum(lastRun.inserted_count)}</div></div>
+            <div><div className="text-xs text-slate-500">Updated</div><div className="text-sm">{fmtNum(lastRun.updated_count)}</div></div>
+            <div><div className="text-xs text-slate-500">Error</div><div className="text-sm break-words">{lastRun.error_text ?? '—'}</div></div>
           </div>
         ) : (
-          <p>Geen runs gevonden.</p>
+          <p className="text-sm text-slate-600">Geen runs gevonden.</p>
         )}
       </section>
 
-      <section style={{ border: '1px solid #ddd', borderRadius: 10, padding: 12, background: '#fff' }}>
-        <h2 style={{ marginTop: 0 }}>Listings</h2>
-        <p style={{ marginTop: 0, color: '#666' }}>Verlopen items worden automatisch verborgen als ze {'>'}36 uur niet meer gezien zijn.</p>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-slate-900">Listings</h2>
+          <span className="text-sm text-slate-600">Alle recente resultaten zichtbaar (limiet 200)</span>
+        </div>
+        <p className="mb-3 text-sm text-slate-600">Mobiel: swipe horizontaal in de tabel voor alle kolommen.</p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1100px] border-collapse text-left text-xs sm:text-sm">
             <thead>
-              <tr>
-                <th align="left">Foto</th>
-                <th align="left">Status</th>
-                <th align="left">Model</th>
-                <th align="left">Listing</th>
-                <th align="right">Year</th>
-                <th align="right">KM</th>
-                <th align="right">JPY</th>
-                <th align="right">Sold JPY</th>
-                <th align="left">Steering</th>
-                <th align="left">Auction date</th>
-                <th align="left">Laatste gezien</th>
-                <th align="left">Link</th>
-                <th align="left">Actie</th>
+              <tr className="border-b border-slate-200 text-slate-600">
+                <th className="px-2 py-2">Foto</th>
+                <th className="px-2 py-2">Status</th>
+                <th className="px-2 py-2">Model</th>
+                <th className="px-2 py-2">Listing</th>
+                <th className="px-2 py-2 text-right">Year</th>
+                <th className="px-2 py-2 text-right">KM</th>
+                <th className="px-2 py-2 text-right">JPY</th>
+                <th className="px-2 py-2 text-right">Sold JPY</th>
+                <th className="px-2 py-2">Steering</th>
+                <th className="px-2 py-2">Auction date</th>
+                <th className="px-2 py-2">Laatste gezien</th>
+                <th className="px-2 py-2">Link</th>
+                <th className="px-2 py-2">Actie</th>
               </tr>
             </thead>
             <tbody>
-              {activeRows.map((x, i) => {
+              {rows.map((x, i) => {
                 const p = (x.payload as { steering?: string; thumbnail_url?: string; sold_price_jpy?: number } | null) ?? {}
                 const img = absImage(p.thumbnail_url)
                 return (
-                  <tr key={i} style={{ borderTop: '1px solid #eee' }}>
-                    <td>{img ? <img src={img} alt="car" style={{ width: 96, height: 54, objectFit: 'cover', borderRadius: 6 }} /> : '—'}</td>
-                    <td>{x.is_new ? '🟢 new' : '⚪ seen'}</td>
-                    <td>{`${x.make ?? ''} ${x.model ?? ''}`.trim() || '—'}</td>
-                    <td>{x.title ?? '—'}</td>
-                    <td align="right">{x.year ?? '—'}</td>
-                    <td align="right">{fmtNum(x.mileage_km)}</td>
-                    <td align="right">{fmtNum(x.price_jpy)}</td>
-                    <td align="right">{fmtNum((p.sold_price_jpy as number | null | undefined) ?? null)}</td>
-                    <td>{p.steering ?? '—'}</td>
-                    <td>{x.auction_date ?? '—'}</td>
-                    <td>{x.last_seen_at ? new Date(x.last_seen_at).toLocaleString() : '—'}</td>
-                    <td><Link href={x.url} target="_blank">open</Link></td>
-                    <td><DeleteListingButton id={x.id} /></td>
+                  <tr key={i} className="border-b border-slate-100 align-top">
+                    <td className="px-2 py-2">
+                      {img ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={img} alt="car" className="h-14 w-24 rounded-md object-cover" />
+                      ) : '—'}
+                    </td>
+                    <td className="px-2 py-2">{x.is_new ? '🟢 new' : '⚪ seen'}</td>
+                    <td className="px-2 py-2">{`${x.make ?? ''} ${x.model ?? ''}`.trim() || '—'}</td>
+                    <td className="px-2 py-2">{x.title ?? '—'}</td>
+                    <td className="px-2 py-2 text-right">{x.year ?? '—'}</td>
+                    <td className="px-2 py-2 text-right">{fmtNum(x.mileage_km)}</td>
+                    <td className="px-2 py-2 text-right">{fmtNum(x.price_jpy)}</td>
+                    <td className="px-2 py-2 text-right">{fmtNum((p.sold_price_jpy as number | null | undefined) ?? null)}</td>
+                    <td className="px-2 py-2">{p.steering ?? '—'}</td>
+                    <td className="px-2 py-2">{x.auction_date ?? '—'}</td>
+                    <td className="px-2 py-2">{x.last_seen_at ? new Date(x.last_seen_at).toLocaleString() : '—'}</td>
+                    <td className="px-2 py-2">
+                      <Link href={x.url} target="_blank" className="text-blue-700 underline underline-offset-2">open</Link>
+                    </td>
+                    <td className="px-2 py-2"><DeleteListingButton id={x.id} /></td>
                   </tr>
                 )
               })}
