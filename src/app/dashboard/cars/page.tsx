@@ -18,20 +18,6 @@ function absImage(src?: string | null) {
   return `https://auc.japancardirect.com/${src}`
 }
 
-async function autoArchiveAuctioned(db: ReturnType<typeof adminClient>) {
-  const today = new Date().toISOString().slice(0, 10)
-  const { data: due } = await db
-    .from('car_listings')
-    .select('*')
-    .lt('auction_date', today)
-    .limit(200)
-
-  for (const row of due ?? []) {
-    await db.from('car_listings_archive').insert({ ...row, archived_at: new Date().toISOString() })
-    await db.from('car_listings').delete().eq('id', row.id)
-  }
-}
-
 export default async function CarsDashboardPage() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return (
@@ -45,7 +31,6 @@ export default async function CarsDashboardPage() {
   }
 
   const db = adminClient()
-  await autoArchiveAuctioned(db)
 
   const [{ data: latest }, { data: runs }, { data: watchlist }] = await Promise.all([
     db
@@ -166,3 +151,4 @@ export default async function CarsDashboardPage() {
     </main>
   )
 }
+
