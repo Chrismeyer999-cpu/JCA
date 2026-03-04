@@ -27,10 +27,10 @@ function parseRowText(t, imageUrl = null) {
   const text = t.replace(/\s+/g, ' ').trim()
   const year = text.match(/\b(19\d{2}|20\d{2})\b/)?.[1]
   const km = text.match(/(\d{1,3}(?:[ ,]\d{3})*)\s*km/i)?.[1]
-  const yenMatches = [...text.matchAll(/(\d{1,3}(?:[ ,]\d{3})*)\s*¥/g)].map((m) => Number(m[1].replace(/[ ,]/g, '')))
+  const yenMatches = [...text.matchAll(/(\d{1,3}(?:[ ,]\d{3})*)\s*(?:¥|JPY|円|�)/g)].map((m) => Number(m[1].replace(/[ ,]/g, '')))
   const firstYen = yenMatches[0] ?? null
   const lastYen = yenMatches[yenMatches.length - 1] ?? null
-  const soldYen = /sold|落札/i.test(text) ? lastYen : null
+  const soldYen = /sold/i.test(text) ? lastYen : null
   const startYen = yenMatches.length > 1 ? firstYen : null
   const engineCc = text.match(/\b(\d{3,4})\s*cc\b/i)?.[1]
   const transmission = /\b(mt|manual|\dmt|f5|f6)\b/i.test(text)
@@ -83,6 +83,46 @@ function passesWatchFilters(parsed, w) {
   const engineMinOk = !w.min_engine_cc || !engine || engine >= w.min_engine_cc
   const engineMaxOk = !w.max_engine_cc || !engine || engine <= w.max_engine_cc
   return yearOk && kmOk && priceOk && transOk && engineMinOk && engineMaxOk
+}
+
+function escRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function hasToken(text, token) {
+  const t = String(token || '').trim().toLowerCase()
+  if (!t) return true
+  const p = `(^|[^a-z0-9])${escRegex(t)}([^a-z0-9]|$)`
+  return new RegExp(p, 'i').test(text)
+}
+
+function modelTokensOk(text, model) {
+  const parts = String(model || '').toLowerCase().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return true
+  if (parts.length === 1 && parts[0].length <= 3) return hasToken(text, parts[0])
+  return parts.every((p) => hasToken(text, p))
+}
+
+function passesWatchTextMatch(text, w) {
+  const t = String(text || '').toLowerCase()
+  const makeOk = hasToken(t, w.make)
+  const modelOk = modelTokensOk(t, w.model)
+  const kwOk = !Array.isArray(w.keywords) || w.keywords.length === 0 || w.keywords.some((k) => hasToken(t, k))
+
+  const make = String(w.make || '').toLowerCase().trim()
+  const model = String(w.model || '').toLowerCase().trim()
+
+  if (make === 'bmw' && model === 'm2') {
+    if (!hasToken(t, 'm2')) return false
+    if (/\b2\s*series\b|\b218\b|\b220\b|\b228\b|\b230\b|\b235\b|\b240\b/i.test(t)) return false
+  }
+
+  if (make === 'porsche' && model === '911') {
+    if (!hasToken(t, '911')) return false
+    if (/\bcayenne\b|\bpanamera\b|\bmacan\b|\bboxster\b|\bcayman\b/i.test(t)) return false
+  }
+
+  return makeOk && modelOk && kwOk
 }
 
 async function scrapeRowsFromCurrentPage(page) {
@@ -166,7 +206,6 @@ async function runSearchForWatch(page, watch) {
     dedup.set(`${r.href}|${r.text.slice(0, 60)}`, r)
   }
 
-  // Fallback voor series-modellen: brede zoekrun en client-side filter op modelnummer.
   if (dedup.size === 0 && seriesMatch) {
     await page.evaluate(
       ({ vendorId }) => {
@@ -207,7 +246,6 @@ async function main() {
 
   await page.goto('https://auc.japancardirect.com/', { waitUntil: 'domcontentloaded' })
 
-  // Open login modal if needed, then submit visible login form.
   const modalUser = page.locator('#form_auth input[name="username"]')
   if (!(await modalUser.isVisible().catch(() => false))) {
     await page.evaluate(() => {
@@ -236,7 +274,6 @@ async function main() {
   for (const w of wl) {
     let candidates = []
     try {
-      // If manual URL exists, use it as override; otherwise run own search by make/model.
       if (w.search_url) {
         await page.goto(w.search_url, { waitUntil: 'domcontentloaded' })
         await page.waitForTimeout(2500)
@@ -252,6 +289,9 @@ async function main() {
       fetched += 1
       const url = c.href.startsWith('http') ? c.href : `https://auc.japancardirect.com/${c.href.replace(/^\//, '')}`
       const parsed = parseRowText(c.text, c.image ?? null)
+      const rowText = String(parsed.payload?.row_text || c.text || '').toLowerCase()
+
+      if (!passesWatchTextMatch(rowText, w)) continue
       if (!passesWatchFilters(parsed, w)) continue
 
       matched += 1
@@ -298,7 +338,6 @@ async function main() {
     await page.waitForTimeout(700)
   }
 
-  // Auto-archive: verplaats listings die >14 dagen niet meer gezien zijn.
   const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
   const { data: expired } = await db
     .from('car_listings')
@@ -312,7 +351,6 @@ async function main() {
     await db.from('car_listings').delete().in('id', expired.map((r) => r.id))
   }
 
-  // Archive retention: verwijder archive records ouder dan 12 maanden.
   const archiveCutoff = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
   await db.from('car_listings_archive').delete().lt('archived_at', archiveCutoff)
 
